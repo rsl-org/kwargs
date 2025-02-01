@@ -1,10 +1,10 @@
 #include <source_location>
-#define KWARGS_FORMAT 1
-#include <kwargs.h>
-
-#include <gtest/gtest.h>
 #include <string_view>
 #include <vector>
+#include <gtest/gtest.h>
+
+#define KWARGS_FORMATTING 1
+#include <kwargs.h>
 
 void check(std::string_view str, std::vector<std::string_view> const& names, std::string_view expected, std::source_location const& loc = std::source_location::current()){
   auto parser = slo::formatting::FmtParser{str};

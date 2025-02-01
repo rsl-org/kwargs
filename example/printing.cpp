@@ -1,6 +1,7 @@
 #include <vector>
 #include <iostream>
 
+#define KWARGS_FORMATTING 1
 #include <kwargs.h>
 
 int main(){

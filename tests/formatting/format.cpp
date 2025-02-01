@@ -1,6 +1,7 @@
 #include <string_view>
-
 #include <gtest/gtest.h>
+
+#define KWARGS_FORMATTING 1
 #include <kwargs.h>
 
 using namespace std::string_view_literals;
