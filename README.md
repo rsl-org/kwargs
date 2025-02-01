@@ -10,7 +10,7 @@ This is a single-header library, to use it simply copy [kwargs.h](include/kwargs
 
 In order to use this library, you need a compiler with [P2996 reflection](https://wg21.link/p2996) support. Currently only [Bloomberg's experimental clang fork](https://github.com/bloomberg/clang-p2996/tree/p2996) is supported, it's completely untested with EDG's implementation. If you require support for that, please reach out to me (ie via issue, email or discord). PRs are also welcome.
 
-Compile with `-freflection` and compile and link against libc++ instead of libstdc++ (otherwise `<experimental/meta>` will not be found). For example:
+Compile with `-freflection` and compile and link against libc++ instead of libstdc++ (otherwise `<experimental/meta>` will not be found).
 
 You can opt into wrappers around `std::print`, `std::println` and `std::format` with support for named arguments by defining `KWARGS_FORMATTING=1`.
 
@@ -53,4 +53,4 @@ clang++ -std=c++26 -freflection -stdlib=libc++ -Iinclude example/simple.cpp -o b
 More examples can be found in the [example](example/) subdirectory of this repository.
 
 # License 
-[kwargs](https://github.com/tsche/kwargs) is provided under the MIT License. Feel free to use and modify it in your projects.
+[kwargs](https://github.com/tsche/kwargs) is provided under the [MIT License](LICENSE). Feel free to use and modify it in your projects.
