@@ -30,3 +30,11 @@
 *.exe
 *.out
 *.app
+
+build/
+.pytest_cache/
+.cache/
+
+**/scratchpad.*
+compile_commands.json
+CMakeUserPresets.json
