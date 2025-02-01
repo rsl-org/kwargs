@@ -5,5 +5,6 @@ function(DEFINE_EXAMPLE TARGET)
   target_link_libraries(${TARGET} PRIVATE kwargs)
 endfunction()
 
+DEFINE_EXAMPLE(simple)
 DEFINE_EXAMPLE(arguments)
 DEFINE_EXAMPLE(printing)

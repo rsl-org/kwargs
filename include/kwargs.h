@@ -33,11 +33,11 @@ SOFTWARE.
 
 #include <experimental/meta>
 
-#ifndef KWARGS_FORMAT
-#  define KWARGS_FORMAT 0
+#ifndef KWARGS_FORMATTING
+#  define KWARGS_FORMATTING 0
 #endif
 
-#if KWARGS_FORMAT == 1
+#if KWARGS_FORMATTING == 1
 #  include <format>
 #  include <print>
 #  include <cstdio>
@@ -290,7 +290,7 @@ constexpr R get(kwargs_t<T> const& obj, R default_) {
   }
 }
 
-#if KWARGS_FORMAT == 1
+#if KWARGS_FORMATTING == 1
 namespace formatting {
 struct FmtParser : util::Parser {
   constexpr std::string transform(std::ranges::input_range auto const& names) {

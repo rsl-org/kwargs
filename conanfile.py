@@ -18,10 +18,10 @@ class KwargsRecipe(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     options = {
         "coverage": [True, False],
-        "format": [True, False],
+        "formatting": [True, False],
         "examples": [True, False]
     }
-    default_options = {"coverage": False, "format": True, "examples": True}
+    default_options = {"coverage": False, "formatting": True, "examples": True}
     generators = "CMakeToolchain", "CMakeDeps"
 
     exports_sources = "CMakeLists.txt", "include/*"
@@ -43,7 +43,7 @@ class KwargsRecipe(ConanFile):
             cmake.configure(
                 variables={
                     "ENABLE_COVERAGE": self.options.coverage,
-                    "ENABLE_FORMAT": self.options.format,
+                    "KWARGS_FORMATTING": self.options.formatting,
                     "ENABLE_EXAMPLES": self.options.examples,
                     # "ENABLE_FMTLIB": self.options.fmt,
                 }
