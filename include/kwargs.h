@@ -44,7 +44,7 @@ SOFTWARE.
 #  include <string>
 #endif
 
-namespace slo {
+namespace erl {
 
 template <typename Impl>
 struct [[nodiscard]] kwargs_t : Impl {
@@ -221,40 +221,49 @@ struct CaptureParser : util::Parser {
   }
 };
 
-consteval std::vector<std::meta::info> make_kwarg_members(std::meta::info lambda, std::string_view capture_list) {
-  std::vector<std::meta::info> args;
+template <util::fixed_string Names, typename... Ts>
+constexpr auto make(Ts&&... values){
+    static_assert(CaptureParser{Names.to_sv()}.parse(), "Invalid keyword argument list");
 
-  // associate every member of the lambda with the corresponding name
-  // retrieved by parsing the capture list
-  auto parser = CaptureParser{capture_list};
-  if (!parser.parse()) {
-    return {};
-  }
+    struct kwargs_impl;
+    consteval { 
+        std::vector<std::meta::info> types{^^Ts...};
+        std::vector<std::meta::info> args;
+        
+        auto parser = CaptureParser{Names.to_sv()};
+        parser.parse();
 
-  for (auto [member, name] : std::views::zip(nonstatic_data_members_of(lambda), parser.names)) {
-    args.push_back(data_member_spec(substitute(^^std::type_identity_t, {type_of(member)}), {.name = name}));
-  }
-  return args;
-}
+        // associate every argument with the corresponding name
+        // retrieved by parsing the capture list
 
-template <util::fixed_string str, typename T>
-auto make_args(T&& captures) {
-  using fnc_t = std::remove_cvref_t<T>;
-
-  static_assert(CaptureParser{str.to_sv()}.parse(), "Invalid keyword argument list");
-
-  // inject aggregate to name the lambda's captures
-  struct kwargs_impl;
-  static constexpr auto meta = define_aggregate(^^kwargs_impl, make_kwarg_members(dealias(^^fnc_t), str.to_sv()));
+        // std::views::zip_transform could also be used for this
+        for (auto [member, name] : std::views::zip(types, parser.names)) {
+            args.push_back(data_member_spec(member, {.name = name}));
+        }
+        define_aggregate(^^kwargs_impl, args);
+    };
 
   // ensure injecting the class worked
-  static_assert(is_type(meta));
+  static_assert(is_type(^^kwargs_impl));
 
-  return [:meta::expand(nonstatic_data_members_of(^^fnc_t)):] >> [&captures]<auto... member>() {
-    return kwargs_t<kwargs_impl>{captures.[:member:]...};
+  return kwargs_t<kwargs_impl>{{std::forward<Ts>(values)...}};
+}
+
+template <util::fixed_string Names, typename T>
+auto from_lambda(T&& lambda) {
+  using fnc_t = std::remove_cvref_t<T>;
+
+  return [:meta::expand(nonstatic_data_members_of(^^fnc_t)):] 
+  >> [&]<auto... member>() {
+    return make<Names>(lambda.[:member:]...);
   };
 }
 }  // namespace kwargs
+
+template <util::fixed_string Names, typename... Ts>
+constexpr auto make_args(Ts&&... values){
+    return kwargs::make<Names>(std::forward<Ts>(values)...);
+}
 
 // get by index
 
@@ -356,7 +365,7 @@ struct NamedFormatString {
 
 template <typename T>
   requires(is_kwargs<T>)
-void print(slo::formatting::NamedFormatString<^^T> fmt, T const& kwargs) {
+void print(erl::formatting::NamedFormatString<^^T> fmt, T const& kwargs) {
   fputs(fmt.format(kwargs).c_str(), stdout);
 }
 
@@ -368,7 +377,7 @@ void print(std::format_string<Args...> fmt, Args&&... args) {
 
 template <typename T>
   requires(is_kwargs<T>)
-void println(slo::formatting::NamedFormatString<^^T> fmt, T const& kwargs) {
+void println(erl::formatting::NamedFormatString<^^T> fmt, T const& kwargs) {
   puts(fmt.format(kwargs).c_str());
 }
 
@@ -380,7 +389,7 @@ void println(std::format_string<Args...> fmt, Args&&... args) {
 
 template <typename T>
   requires(is_kwargs<T>)
-std::string format(slo::formatting::NamedFormatString<^^T> fmt, T const& kwargs) {
+std::string format(erl::formatting::NamedFormatString<^^T> fmt, T const& kwargs) {
   return fmt.format(kwargs);
 }
 
@@ -391,15 +400,15 @@ std::string format(std::format_string<Args...> fmt, Args&&... args) {
 }
 #endif
 
-}  // namespace slo
+}  // namespace erl
 
 template <typename T>
-struct std::tuple_size<slo::kwargs_t<T>>
-    : public integral_constant<size_t, slo::meta::member_count<std::remove_cvref_t<T>>> {};
+struct std::tuple_size<erl::kwargs_t<T>>
+    : public integral_constant<size_t, erl::meta::member_count<std::remove_cvref_t<T>>> {};
 
 template <std::size_t I, typename T>
-struct std::tuple_element<I, slo::kwargs_t<T>> {
-  using type = [:slo::meta::get_nth_member(^^T, I):];
+struct std::tuple_element<I, erl::kwargs_t<T>> {
+  using type = [:erl::meta::get_nth_member(^^T, I):];
 };
 
-#define make_args(...) ::slo::kwargs::make_args<#__VA_ARGS__>([__VA_ARGS__] {})
+#define make_args(...) ::erl::kwargs::from_lambda<#__VA_ARGS__>([__VA_ARGS__] {})

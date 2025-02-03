@@ -8,7 +8,7 @@
 void check(std::string_view str,
            std::vector<std::string_view> const& expected_names,
            std::source_location const& loc = std::source_location::current()) {
-  auto parser          = slo::kwargs::CaptureParser{str};
+  auto parser          = erl::kwargs::CaptureParser{str};
   auto source_location = std::format("{}:{}", loc.file_name(), loc.line());
   EXPECT_TRUE(parser.parse()) << source_location;
 
@@ -19,7 +19,7 @@ void check(std::string_view str,
 }
 
 void check_reject(std::string_view str, std::source_location const& loc = std::source_location::current()) {
-  auto parser = slo::kwargs::CaptureParser{str};
+  auto parser = erl::kwargs::CaptureParser{str};
   auto source_location = std::format("{}:{}", loc.file_name(), loc.line());
   EXPECT_FALSE(parser.parse()) << source_location;
 }
