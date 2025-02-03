@@ -53,7 +53,7 @@ clang++ -std=c++26 -freflection -stdlib=libc++ -Iinclude example/simple.cpp -o b
 More examples can be found in the [example](example/) subdirectory of this repository.
 
 # Why `erl`?
-**E**xperimental **R**efleciton **L**ibrary. Also I like Erlang.
+**E**xperimental **R**eflection **L**ibrary. Also I like Erlang.
 
 # License 
 [kwargs](https://github.com/tsche/kwargs) is provided under the [MIT License](LICENSE). Feel free to use and modify it in your projects.
