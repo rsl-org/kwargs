@@ -291,7 +291,7 @@ constexpr auto get(kwargs_t<T> const& obj) {
 }
 
 template <util::fixed_string name, typename T, typename R>
-constexpr R get(kwargs_t<T> const& obj, R default_) {
+constexpr auto get(kwargs_t<T> const& obj, R default_) {
   if constexpr (meta::member_count<T> > meta::get_member_index<T>(name.to_sv())) {
     return get<name>(obj);
   } else {
