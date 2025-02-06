@@ -10,6 +10,8 @@ add_library(kwargs INTERFACE)
 target_include_directories(kwargs INTERFACE include)
 
 target_compile_options(kwargs INTERFACE "-stdlib=libc++" "-freflection")
+target_compile_options(kwargs INTERFACE "-Wno-c++26-extensions")
+
 target_link_options(kwargs INTERFACE "-stdlib=libc++" "-lc++abi")
 
 option(BUILD_TESTING "Enable tests" ON)

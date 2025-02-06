@@ -6,12 +6,12 @@ template <typename T>
     { kwargs.x } -> std::convertible_to<int>;
   }
 void foo(int y, erl::kwargs_t<T> const& kwargs) {
-  std::println("y: {} x: {} kwarg y: {}", y, kwargs.x, get<"y">(kwargs, 42));
+  std::println("y: {} x: {} kwarg y: {}", y, kwargs.x, get_or<"y">(kwargs, 42));
 }
 
 template <typename T>
 void bar_impl(int x, int y, erl::kwargs_t<T> const& kwargs) {
-  std::println("x: {} y: {} kwarg foo: {}", x, y, get<"foo">(kwargs, "bar"));
+  std::println("x: {} y: {} kwarg foo: {}", x, y, get_or<"foo">(kwargs, "bar"));
 }
 #define bar(x, y, ...) bar_impl(x, y, make_args(__VA_ARGS__))
 

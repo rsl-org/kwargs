@@ -17,7 +17,7 @@ int get_by_name(erl::kwargs_t<T> const& kwargs) {
 
 template <typename T>
 int get_by_name_default(erl::kwargs_t<T> const& kwargs) {
-  return get<"x">(kwargs, 42);
+  return get_or<"x">(kwargs, 42);
 }
 
 template <typename T>
@@ -27,7 +27,7 @@ int get_by_idx(erl::kwargs_t<T> const& kwargs) {
 
 template <typename T>
 int get_by_idx_default(erl::kwargs_t<T> const& kwargs) {
-  return get<0>(kwargs, 42);
+  return get_or<0>(kwargs, 42);
 }
 
 TEST(KwArgs, Empty) {

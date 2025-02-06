@@ -5,7 +5,7 @@
 
 template <typename T>
 int test(int x, erl::kwargs_t<T> args){
-  return x * get<"y">(args, 42);
+  return x * get_or<"y">(args, 42);
 }
 
 int main(){

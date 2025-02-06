@@ -137,7 +137,12 @@ consteval std::size_t get_member_index(std::string_view name) {
   if (auto it = std::ranges::find(names, name); it != names.end()) {
     return std::distance(names.begin(), it);
   }
-  return -1;
+  return -1ULL;
+}
+
+template <typename T>
+consteval bool has_member(std::string_view name) {
+  return get_member_index<T>(name) != -1ULL;
 }
 
 template <typename T>
@@ -166,7 +171,7 @@ template <std::ranges::range R>
 consteval auto expand(R const& range) {
   std::vector<std::meta::info> args;
   for (auto item : range) {
-    args.push_back(reflect_value(item));
+    args.push_back(std::meta::reflect_value(item));
   }
   return substitute(^^impl::replicator, args);
 }
@@ -222,29 +227,31 @@ struct CaptureParser : util::Parser {
 };
 
 template <util::fixed_string Names, typename... Ts>
-constexpr auto make(Ts&&... values){
-    static_assert(CaptureParser{Names.to_sv()}.parse(), "Invalid keyword argument list");
+constexpr auto make(Ts&&... values) {
+  struct kwargs_impl;
+  consteval {
+    std::vector<std::meta::info> types{^^Ts...};
+    std::vector<std::meta::info> args;
 
-    struct kwargs_impl;
-    consteval { 
-        std::vector<std::meta::info> types{^^Ts...};
-        std::vector<std::meta::info> args;
-        
-        auto parser = CaptureParser{Names.to_sv()};
-        parser.parse();
+    auto parser = CaptureParser{Names.to_sv()};
 
-        // associate every argument with the corresponding name
-        // retrieved by parsing the capture list
+    // with P3068 parser.parse() could throw to provide better diagnostics at this point
+    if (!parser.parse()) {
+      return;
+    }
 
-        // std::views::zip_transform could also be used for this
-        for (auto [member, name] : std::views::zip(types, parser.names)) {
-            args.push_back(data_member_spec(member, {.name = name}));
-        }
-        define_aggregate(^^kwargs_impl, args);
-    };
+    // associate every argument with the corresponding name
+    // retrieved by parsing the capture list
+
+    // std::views::zip_transform could also be used for this
+    for (auto [member, name] : std::views::zip(types, parser.names)) {
+      args.push_back(data_member_spec(member, {.name = name}));
+    }
+    define_aggregate(^^kwargs_impl, args);
+  };
 
   // ensure injecting the class worked
-  static_assert(is_type(^^kwargs_impl));
+  static_assert(is_type(^^kwargs_impl), std::string{"Invalid keyword arguments `"} + Names.to_sv() + "`");
 
   return kwargs_t<kwargs_impl>{{std::forward<Ts>(values)...}};
 }
@@ -253,47 +260,61 @@ template <util::fixed_string Names, typename T>
 auto from_lambda(T&& lambda) {
   using fnc_t = std::remove_cvref_t<T>;
 
-  return [:meta::expand(nonstatic_data_members_of(^^fnc_t)):] 
-  >> [&]<auto... member>() {
-    return make<Names>(lambda.[:member:]...);
+  return [:meta::expand(nonstatic_data_members_of(^^fnc_t)):] >> [&]<auto... member>() {
+    return make<Names>(std::forward<T>(lambda).[:member:]...);
   };
 }
 }  // namespace kwargs
 
 template <util::fixed_string Names, typename... Ts>
-constexpr auto make_args(Ts&&... values){
-    return kwargs::make<Names>(std::forward<Ts>(values)...);
+constexpr auto make_args(Ts&&... values) {
+  return kwargs::make<Names>(std::forward<Ts>(values)...);
 }
 
-// get by index
+template <typename T>
+consteval bool has_arg(kwargs_t<T> const&, std::string_view name) {
+  return meta::has_member<T>(name);
+}
+
+// get
 
 template <std::size_t I, typename T>
-  requires(meta::member_count<T> > I)
-constexpr auto get(kwargs_t<T> const& obj) noexcept {
-  return obj.[:meta::get_nth_member(^^T, I):];
+  requires is_kwargs<std::remove_cvref_t<T>>
+constexpr auto get(T&& obj) noexcept {
+  using kwarg_tuple = typename std::remove_cvref_t<T>::type;
+  static_assert(meta::member_count<kwarg_tuple> > I);
+
+  return std::forward<T>(obj).[:meta::get_nth_member(^^kwarg_tuple, I):];
 }
 
+template <util::fixed_string name, typename T>
+  requires is_kwargs<std::remove_cvref_t<T>>
+constexpr auto get(T&& obj) {
+  using kwarg_tuple = typename std::remove_cvref_t<T>::type;
+  static_assert(meta::has_member<kwarg_tuple>(name.to_sv()), "Keyword argument `" + std::string(name.to_sv()) + "` not found.");
+
+  return std::forward<T>(obj)
+      .[:meta::get_nth_member(^^kwarg_tuple, meta::get_member_index<kwarg_tuple>(name.to_sv())):];
+}
+
+// get_or
 template <std::size_t I, typename T, typename R>
-constexpr auto get(kwargs_t<T> const& obj, R default_) noexcept {
-  if constexpr (meta::member_count<T> > I) {
-    return get<I>(obj);
+  requires is_kwargs<std::remove_cvref_t<T>>
+constexpr auto get_or(T&& obj, R default_) noexcept {
+  using kwarg_tuple = typename std::remove_cvref_t<T>::type;
+  if constexpr (meta::member_count<kwarg_tuple> > I) {
+    return get<I>(std::forward<T>(obj));
   } else {
     return default_;
   }
 }
 
-// get by name
-
-template <util::fixed_string name, typename T>
-  requires(meta::member_count<T> > meta::get_member_index<T>(name.to_sv()))
-constexpr auto get(kwargs_t<T> const& obj) {
-  return obj.[:meta::get_nth_member(^^T, meta::get_member_index<T>(name.to_sv())):];
-}
-
 template <util::fixed_string name, typename T, typename R>
-constexpr auto get(kwargs_t<T> const& obj, R default_) {
-  if constexpr (meta::member_count<T> > meta::get_member_index<T>(name.to_sv())) {
-    return get<name>(obj);
+  requires is_kwargs<std::remove_cvref_t<T>>
+constexpr auto get_or(T&& kwargs, R default_) {
+  using kwarg_tuple = typename std::remove_cvref_t<T>::type;
+  if constexpr (meta::member_count<kwarg_tuple> > meta::get_member_index<kwarg_tuple>(name.to_sv())) {
+    return get<name>(std::forward<T>(kwargs));
   } else {
     return default_;
   }
@@ -322,7 +343,6 @@ struct FmtParser : util::Parser {
         // find name
         std::size_t start = cursor;
         skip_to('}', ':');
-        // ++index;
         auto name = data.substr(start, cursor - start);
 
         // replace name
