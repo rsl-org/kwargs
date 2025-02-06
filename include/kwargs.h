@@ -161,6 +161,11 @@ struct Replicator {
   constexpr decltype(auto) operator>>(F fnc) const {
     return fnc.template operator()<Vs...>();
   }
+
+  template <typename F>
+  constexpr void operator>>=(F fnc) const {
+    (fnc.template operator()<Vs>(), ...);
+  }
 };
 
 template <auto... Vs>
@@ -176,10 +181,25 @@ consteval auto expand(R const& range) {
   return substitute(^^impl::replicator, args);
 }
 
+template <std::ranges::range R>
+consteval auto enumerate(R range) {
+  std::vector<std::meta::info> args;
+
+  // could also use std::views::enumerate(range)
+  for (auto idx = 0; auto item : range) {
+    args.push_back(std::meta::reflect_value(std::pair{idx++, item}));
+  }
+  return substitute(^^impl::replicator, args);
+}
+
+consteval auto sequence(unsigned maximum) {
+  return expand(std::ranges::iota_view{0U, maximum});
+}
+
 }  // namespace meta
 
 namespace kwargs {
-struct CaptureParser : util::Parser {
+struct NameParser : util::Parser {
   std::vector<std::string_view> names;
 
   constexpr bool parse() {
@@ -233,7 +253,7 @@ constexpr auto make(Ts&&... values) {
     std::vector<std::meta::info> types{^^Ts...};
     std::vector<std::meta::info> args;
 
-    auto parser = CaptureParser{Names.to_sv()};
+    auto parser = NameParser{Names.to_sv()};
 
     // with P3068 parser.parse() could throw to provide better diagnostics at this point
     if (!parser.parse()) {
@@ -260,7 +280,8 @@ template <util::fixed_string Names, typename T>
 auto from_lambda(T&& lambda) {
   using fnc_t = std::remove_cvref_t<T>;
 
-  return [:meta::expand(nonstatic_data_members_of(^^fnc_t)):] >> [&]<auto... member>() {
+  return [:meta::expand(nonstatic_data_members_of(^^fnc_t)):]
+  >> [&]<auto... member>() {
     return make<Names>(std::forward<T>(lambda).[:member:]...);
   };
 }
@@ -291,7 +312,8 @@ template <util::fixed_string name, typename T>
   requires is_kwargs<std::remove_cvref_t<T>>
 constexpr auto get(T&& obj) {
   using kwarg_tuple = typename std::remove_cvref_t<T>::type;
-  static_assert(meta::has_member<kwarg_tuple>(name.to_sv()), "Keyword argument `" + std::string(name.to_sv()) + "` not found.");
+  static_assert(meta::has_member<kwarg_tuple>(name.to_sv()),
+                "Keyword argument `" + std::string(name.to_sv()) + "` not found.");
 
   return std::forward<T>(obj)
       .[:meta::get_nth_member(^^kwarg_tuple, meta::get_member_index<kwarg_tuple>(name.to_sv())):];
@@ -363,10 +385,11 @@ std::string format_impl(Args const& kwargs) {
   static constexpr auto fmt_fixed =
       std::meta::define_static_string(FmtParser{fmt.to_sv()}.transform(meta::get_member_names<typename Args::type>()));
 
-  return [&]<std::size_t... Idx>(std::index_sequence<Idx...>) {
+  return [:meta::sequence(std::tuple_size_v<Args>):]
+  >> [&]<std::size_t... Idx>() {
     using fmt_type = std::format_string<std::tuple_element<Idx, Args>...>;
     return std::format(fmt_fixed, get<Idx>(kwargs)...);
-  }(std::make_index_sequence<std::tuple_size_v<Args>>{});
+  };
 }
 
 template <std::meta::info Args>
@@ -418,6 +441,64 @@ template <typename... Args>
 std::string format(std::format_string<Args...> fmt, Args&&... args) {
   return std::format(fmt, std::forward<Args>(args)...);
 }
+#endif
+
+#if __has_feature(parameter_reflection)
+namespace kwargs {
+template <std::meta::info F>
+  requires(is_function(F))
+struct Wrap {
+  template <typename T, std::size_t PosOnly = 0>
+  static constexpr void check_args() {
+    [:erl::meta::expand(parameters_of(F) | std::views::take(PosOnly)):] >>= [&]<auto Param> {
+      static_assert(!erl::meta::has_member<T>(identifier_of(Param)),
+                    "In call to `" + std::string(identifier_of(F)) + "`: Positional argument `" + identifier_of(Param) +
+                        "` repeated as keyword argument.");
+    };
+
+    [:erl::meta::expand(parameters_of(F) | std::views::drop(PosOnly)):] >>= [&]<auto Param> {
+      static_assert(
+          erl::meta::has_member<T>(identifier_of(Param)),
+          "In call to `" + std::string(identifier_of(F)) + "`: Argument `" + identifier_of(Param) + "` missing.");
+    };
+  }
+
+  static constexpr decltype(auto) operator()()
+    requires requires { [:F:](); }
+  {
+    return [:F:]();
+  }
+
+  template <typename... Args>
+    requires(sizeof...(Args) > 0)
+  static constexpr decltype(auto) operator()(Args&&... args) {
+    static constexpr std::size_t args_size = sizeof...(Args) - 1;
+    using T                                = std::remove_cvref_t<Args...[args_size]>;
+
+    if constexpr (erl::is_kwargs<T>) {
+      check_args<typename T::type, args_size>();
+
+      return [:erl::meta::expand(parameters_of(F) | std::views::drop(args_size)):]
+      >> [&]<auto... Params> {
+        return [:erl::meta::sequence(args_size):]
+        >> [&]<std::size_t... Idx> {
+          return [:F:](
+              /* positional arguments */
+              std::forward<Args...[Idx]>(args...[Idx])...,
+              /* keyword arguments */
+              get<erl::meta::get_member_index<typename T::type>(identifier_of(Params))>(args...[args_size])...);
+        };
+      };
+    } else {
+      // no keyword arguments
+      return [:F:](std::forward<Args>(args)...);
+    }
+  }
+};
+
+template <auto F>
+constexpr inline Wrap<F> invoke{};
+}  // namespace kwargs
 #endif
 
 }  // namespace erl
