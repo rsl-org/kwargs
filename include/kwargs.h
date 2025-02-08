@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include <algorithm>
+#include <concepts>
 #include <string_view>
 #include <vector>
 #include <tuple>
@@ -34,7 +35,7 @@ SOFTWARE.
 #include <experimental/meta>
 
 #ifndef KWARGS_FORMATTING
-#  define KWARGS_FORMATTING 0
+#  define KWARGS_FORMATTING 1
 #endif
 
 #if KWARGS_FORMATTING == 1
@@ -61,16 +62,15 @@ struct fixed_string {
   constexpr static auto size = N;
 
   constexpr fixed_string() = default;
-  constexpr fixed_string(const char (&str)[N + 1]) noexcept {
+  constexpr explicit(false) fixed_string(const char (&str)[N + 1]) noexcept {
     auto idx = std::size_t{0};
     for (char const chr : str) {
       data[idx++] = chr;
     }
   }
-
-  constexpr fixed_string(std::string_view str) { str.copy(data, N); }
-
-  [[nodiscard]] constexpr std::string_view to_sv() const { return std::string_view{data}; }
+  constexpr explicit fixed_string(std::same_as<char> auto... Vs) : data{Vs...} {}
+  constexpr explicit fixed_string(std::string_view str) { str.copy(data, N); }
+  constexpr explicit(false) operator std::string_view() const { return std::string_view{data}; }
 
   char data[N + 1]{};
 };
@@ -81,7 +81,7 @@ fixed_string(char const (&)[N]) -> fixed_string<N - 1>;
 constexpr std::string utos(unsigned value) {
   std::string out{};
   do {
-    out += '0' + static_cast<char>(value % 10);
+    out += static_cast<char>('0' + (value % 10U));
     value /= 10;
   } while (value > 0);
   return {out.rbegin(), out.rend()};
@@ -137,7 +137,7 @@ consteval std::size_t get_member_index(std::string_view name) {
   if (auto it = std::ranges::find(names, name); it != names.end()) {
     return std::distance(names.begin(), it);
   }
-  return -1ULL;
+  return -1UZ;
 }
 
 template <typename T>
@@ -153,6 +153,30 @@ consteval std::vector<std::string_view> get_member_names() {
 
 template <typename T>
 constexpr inline std::size_t member_count = nonstatic_data_members_of(^^T).size();
+
+template <char... Vs>
+constexpr inline auto static_string = util::fixed_string<sizeof...(Vs)>{Vs...};
+
+template <typename T, T... Vs>
+constexpr inline T static_array[sizeof...(Vs)]{Vs...};
+
+consteval auto intern(std::string_view str) {
+  std::vector<std::meta::info> args;
+  for (auto character : str) {
+    args.push_back(std::meta::reflect_value(character));
+  }
+  return substitute(^^static_string, args);
+}
+
+template <std::ranges::input_range R>
+  requires (!std::same_as<std::ranges::range_value_t<R>, char>)
+consteval auto intern(R&& iterable) {
+  std::vector args = {^^std::ranges::range_value_t<R>};
+  for (auto element : iterable) {
+    args.push_back(std::meta::reflect_value(element));
+  }
+  return substitute(^^static_array, args);
+}
 
 namespace impl {
 template <auto... Vs>
@@ -253,7 +277,7 @@ constexpr auto make(Ts&&... values) {
     std::vector<std::meta::info> types{^^Ts...};
     std::vector<std::meta::info> args;
 
-    auto parser = NameParser{Names.to_sv()};
+    auto parser = NameParser{Names};
 
     // with P3068 parser.parse() could throw to provide better diagnostics at this point
     if (!parser.parse()) {
@@ -271,7 +295,7 @@ constexpr auto make(Ts&&... values) {
   };
 
   // ensure injecting the class worked
-  static_assert(is_type(^^kwargs_impl), std::string{"Invalid keyword arguments `"} + Names.to_sv() + "`");
+  static_assert(is_type(^^kwargs_impl), std::string{"Invalid keyword arguments `"} + Names + "`");
 
   return kwargs_t<kwargs_impl>{{std::forward<Ts>(values)...}};
 }
@@ -280,8 +304,7 @@ template <util::fixed_string Names, typename T>
 auto from_lambda(T&& lambda) {
   using fnc_t = std::remove_cvref_t<T>;
 
-  return [:meta::expand(nonstatic_data_members_of(^^fnc_t)):]
-  >> [&]<auto... member>() {
+  return [:meta::expand(nonstatic_data_members_of(^^fnc_t)):] >> [&]<auto... member>() {
     return make<Names>(std::forward<T>(lambda).[:member:]...);
   };
 }
@@ -301,31 +324,29 @@ consteval bool has_arg(kwargs_t<T> const&, std::string_view name) {
 
 template <std::size_t I, typename T>
   requires is_kwargs<std::remove_cvref_t<T>>
-constexpr auto get(T&& obj) noexcept {
+constexpr auto get(T&& kwargs) noexcept {
   using kwarg_tuple = typename std::remove_cvref_t<T>::type;
   static_assert(meta::member_count<kwarg_tuple> > I);
 
-  return std::forward<T>(obj).[:meta::get_nth_member(^^kwarg_tuple, I):];
+  return std::forward<T>(kwargs).[:meta::get_nth_member(^^kwarg_tuple, I):];
 }
 
 template <util::fixed_string name, typename T>
   requires is_kwargs<std::remove_cvref_t<T>>
-constexpr auto get(T&& obj) {
+constexpr auto get(T&& kwargs) {
   using kwarg_tuple = typename std::remove_cvref_t<T>::type;
-  static_assert(meta::has_member<kwarg_tuple>(name.to_sv()),
-                "Keyword argument `" + std::string(name.to_sv()) + "` not found.");
+  static_assert(meta::has_member<kwarg_tuple>(name), "Keyword argument `" + std::string(name) + "` not found.");
 
-  return std::forward<T>(obj)
-      .[:meta::get_nth_member(^^kwarg_tuple, meta::get_member_index<kwarg_tuple>(name.to_sv())):];
+  return std::forward<T>(kwargs).[:meta::get_nth_member(^^kwarg_tuple, meta::get_member_index<kwarg_tuple>(name)):];
 }
 
 // get_or
 template <std::size_t I, typename T, typename R>
   requires is_kwargs<std::remove_cvref_t<T>>
-constexpr auto get_or(T&& obj, R default_) noexcept {
+constexpr auto get_or(T&& kwargs, R default_) noexcept {
   using kwarg_tuple = typename std::remove_cvref_t<T>::type;
   if constexpr (meta::member_count<kwarg_tuple> > I) {
-    return get<I>(std::forward<T>(obj));
+    return get<I>(std::forward<T>(kwargs));
   } else {
     return default_;
   }
@@ -335,7 +356,7 @@ template <util::fixed_string name, typename T, typename R>
   requires is_kwargs<std::remove_cvref_t<T>>
 constexpr auto get_or(T&& kwargs, R default_) {
   using kwarg_tuple = typename std::remove_cvref_t<T>::type;
-  if constexpr (meta::member_count<kwarg_tuple> > meta::get_member_index<kwarg_tuple>(name.to_sv())) {
+  if constexpr (meta::member_count<kwarg_tuple> > meta::get_member_index<kwarg_tuple>(name)) {
     return get<name>(std::forward<T>(kwargs));
   } else {
     return default_;
@@ -382,33 +403,33 @@ struct FmtParser : util::Parser {
 
 template <util::fixed_string fmt, typename Args>
 std::string format_impl(Args const& kwargs) {
-  static constexpr auto fmt_fixed =
-      std::meta::define_static_string(FmtParser{fmt.to_sv()}.transform(meta::get_member_names<typename Args::type>()));
-
   return [:meta::sequence(std::tuple_size_v<Args>):]
   >> [&]<std::size_t... Idx>() {
-    using fmt_type = std::format_string<std::tuple_element<Idx, Args>...>;
-    return std::format(fmt_fixed, get<Idx>(kwargs)...);
+    return std::format(fmt, get<Idx>(kwargs)...);
   };
 }
 
-template <std::meta::info Args>
+template <typename Args>
 struct NamedFormatString {
-  using format_type = std::string (*)([:Args:] const&);
+  using format_type = std::string (*)(Args const&);
   format_type format;
 
   template <typename Tp>
     requires std::convertible_to<Tp const&, std::string_view>
   consteval explicit(false) NamedFormatString(Tp const& str) {
-    auto fmt = util::fixed_string{str};
-    format   = extract<format_type>(substitute(^^format_impl, {std::meta::reflect_value(fmt), Args}));
+    auto parser = FmtParser{str};
+    auto fmt    = parser.transform(meta::get_member_names<typename Args::type>());
+    format      = extract<format_type>(substitute(^^format_impl, {meta::intern(fmt), ^^Args}));
   }
 };
 }  // namespace formatting
 
 template <typename T>
+using named_format_string = formatting::NamedFormatString<std::type_identity_t<T>>;
+
+template <typename T>
   requires(is_kwargs<T>)
-void print(erl::formatting::NamedFormatString<^^T> fmt, T const& kwargs) {
+void print(erl::named_format_string<T> fmt, T const& kwargs) {
   fputs(fmt.format(kwargs).c_str(), stdout);
 }
 
@@ -420,7 +441,7 @@ void print(std::format_string<Args...> fmt, Args&&... args) {
 
 template <typename T>
   requires(is_kwargs<T>)
-void println(erl::formatting::NamedFormatString<^^T> fmt, T const& kwargs) {
+void println(erl::named_format_string<T> fmt, T const& kwargs) {
   puts(fmt.format(kwargs).c_str());
 }
 
@@ -432,7 +453,7 @@ void println(std::format_string<Args...> fmt, Args&&... args) {
 
 template <typename T>
   requires(is_kwargs<T>)
-std::string format(erl::formatting::NamedFormatString<^^T> fmt, T const& kwargs) {
+std::string format(erl::named_format_string<T> fmt, T const& kwargs) {
   return fmt.format(kwargs);
 }
 
@@ -478,10 +499,8 @@ struct Wrap {
     if constexpr (erl::is_kwargs<T>) {
       check_args<typename T::type, args_size>();
 
-      return [:erl::meta::expand(parameters_of(F) | std::views::drop(args_size)):]
-      >> [&]<auto... Params> {
-        return [:erl::meta::sequence(args_size):]
-        >> [&]<std::size_t... Idx> {
+      return [:erl::meta::expand(parameters_of(F) | std::views::drop(args_size)):] >> [&]<auto... Params> {
+        return [:erl::meta::sequence(args_size):] >> [&]<std::size_t... Idx> {
           return [:F:](
               /* positional arguments */
               std::forward<Args...[Idx]>(args...[Idx])...,
