@@ -248,7 +248,7 @@ struct NameParser : util::Parser {
       // find '=', ',' or whitespace
       skip_to('=', ',', ' ', '\n', '\r', '\t');
       if (cursor - start == 0) {
-        // possibly default capture, reject
+        // default capture or invalid name
         return false;
       }
 
