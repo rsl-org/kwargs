@@ -316,7 +316,7 @@ constexpr auto make_args(Ts&&... values) {
 }
 
 template <typename T>
-consteval bool has_arg(kwargs_t<T> const&, std::string_view name) {
+consteval bool has_arg(std::string_view name) {
   return meta::has_member<T>(name);
 }
 
