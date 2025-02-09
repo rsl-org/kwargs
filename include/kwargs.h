@@ -317,7 +317,11 @@ constexpr auto make_args(Ts&&... values) {
 
 template <typename T>
 consteval bool has_arg(std::string_view name) {
-  return meta::has_member<T>(name);
+  if constexpr (is_kwargs<std::remove_cvref_t<T>>){
+    return meta::has_member<typename T::type>(name);
+  } else {
+    return meta::has_member<T>(name);
+  }
 }
 
 // get
