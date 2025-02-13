@@ -2,7 +2,7 @@
 
 `erl::kwargs` is an experimental single-header library that allows for keyword arguments (also known as labeled or named arguments) through use of C++26 reflection ([P2996](https://wg21.link/p2996)).
 
-You can find more information about it's implementation in my blog post [Fun with C++26 reflection - Keyword Arguments](https://pydong.org/posts/KwArgs/) (once I've published it :P).
+You can find more information about it's implementation in my blog post [Fun with C++26 reflection - Keyword Arguments](https://pydong.org/posts/KwArgs/).
 
 
 # Usage

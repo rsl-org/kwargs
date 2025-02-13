@@ -388,7 +388,7 @@ struct FmtParser : util::Parser {
         }
 
         // find name
-        std::size_t start = cursor;
+        auto start = cursor;
         skip_to('}', ':');
         auto name = data.substr(start, cursor - start);
 
