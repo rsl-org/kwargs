@@ -127,13 +127,13 @@ struct Parser {
 namespace meta {
 
 consteval std::meta::info get_nth_member(std::meta::info reflection, std::size_t n) {
-  return nonstatic_data_members_of(reflection)[n];
+  return nonstatic_data_members_of(reflection, std::meta::access_context::unchecked())[n];
 }
 
 template <typename T>
 consteval std::size_t get_member_index(std::string_view name) {
   std::vector<std::string_view> names =
-      nonstatic_data_members_of(^^T) | std::views::transform(std::meta::identifier_of) | std::ranges::to<std::vector>();
+      nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()) | std::views::transform(std::meta::identifier_of) | std::ranges::to<std::vector>();
   if (auto it = std::ranges::find(names, name); it != names.end()) {
     return std::distance(names.begin(), it);
   }
@@ -147,12 +147,12 @@ consteval bool has_member(std::string_view name) {
 
 template <typename T>
 consteval std::vector<std::string_view> get_member_names() {
-  return nonstatic_data_members_of(^^T) | std::views::transform(std::meta::identifier_of) |
+  return nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()) | std::views::transform(std::meta::identifier_of) |
          std::ranges::to<std::vector>();
 }
 
 template <typename T>
-constexpr inline std::size_t member_count = nonstatic_data_members_of(^^T).size();
+constexpr inline std::size_t member_count = nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()).size();
 
 template <char... Vs>
 constexpr inline auto static_string = util::fixed_string<sizeof...(Vs)>{Vs...};
@@ -163,7 +163,7 @@ constexpr inline T static_array[sizeof...(Vs)]{Vs...};
 consteval auto intern(std::string_view str) {
   std::vector<std::meta::info> args;
   for (auto character : str) {
-    args.push_back(std::meta::reflect_value(character));
+    args.push_back(std::meta::reflect_constant(character));
   }
   return substitute(^^static_string, args);
 }
@@ -173,7 +173,7 @@ template <std::ranges::input_range R>
 consteval auto intern(R&& iterable) {
   std::vector args = {^^std::ranges::range_value_t<R>};
   for (auto element : iterable) {
-    args.push_back(std::meta::reflect_value(element));
+    args.push_back(std::meta::reflect_constant(element));
   }
   return substitute(^^static_array, args);
 }
@@ -200,7 +200,7 @@ template <std::ranges::range R>
 consteval auto expand(R const& range) {
   std::vector<std::meta::info> args;
   for (auto item : range) {
-    args.push_back(std::meta::reflect_value(item));
+    args.push_back(std::meta::reflect_constant(item));
   }
   return substitute(^^impl::replicator, args);
 }
@@ -211,7 +211,7 @@ consteval auto enumerate(R range) {
 
   // could also use std::views::enumerate(range)
   for (auto idx = 0; auto item : range) {
-    args.push_back(std::meta::reflect_value(std::pair{idx++, item}));
+    args.push_back(std::meta::reflect_constant(std::pair{idx++, item}));
   }
   return substitute(^^impl::replicator, args);
 }
@@ -304,7 +304,7 @@ template <util::fixed_string Names, typename T>
 auto from_lambda(T&& lambda) {
   using fnc_t = std::remove_cvref_t<T>;
 
-  return [:meta::expand(nonstatic_data_members_of(^^fnc_t)):] >> [&]<auto... member>() {
+  return [:meta::expand(nonstatic_data_members_of(^^fnc_t, std::meta::access_context::unchecked())):] >> [&]<auto... member>() {
     return make<Names>(std::forward<T>(lambda).[:member:]...);
   };
 }
