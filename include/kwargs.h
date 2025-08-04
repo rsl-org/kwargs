@@ -45,7 +45,7 @@ SOFTWARE.
 #  include <string>
 #endif
 
-namespace erl {
+namespace rsl {
 
 template <typename Impl>
 struct [[nodiscard]] kwargs_t : Impl {
@@ -55,7 +55,7 @@ struct [[nodiscard]] kwargs_t : Impl {
 template <typename T>
 concept is_kwargs = has_template_arguments(^^T) && template_of(^^T) == ^^kwargs_t;
 
-namespace util {
+namespace _kwargs_impl {
 
 template <std::size_t N>
 struct fixed_string {
@@ -122,9 +122,6 @@ struct Parser {
   [[nodiscard]] constexpr char current() const { return data[cursor]; }
   [[nodiscard]] constexpr bool is_valid() const { return cursor < data.length(); }
 };
-}  // namespace util
-
-namespace meta {
 
 consteval std::meta::info get_nth_member(std::meta::info reflection, std::size_t n) {
   return nonstatic_data_members_of(reflection, std::meta::access_context::unchecked())[n];
@@ -155,7 +152,7 @@ template <typename T>
 constexpr inline std::size_t member_count = nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()).size();
 
 template <char... Vs>
-constexpr inline auto static_string = util::fixed_string<sizeof...(Vs)>{Vs...};
+constexpr inline auto static_string = _kwargs_impl::fixed_string<sizeof...(Vs)>{Vs...};
 
 template <typename T, T... Vs>
 constexpr inline T static_array[sizeof...(Vs)]{Vs...};
@@ -223,7 +220,7 @@ consteval auto sequence(unsigned maximum) {
 }  // namespace meta
 
 namespace kwargs {
-struct NameParser : util::Parser {
+struct NameParser : _kwargs_impl::Parser {
   std::vector<std::string_view> names;
 
   constexpr bool parse() {
@@ -270,7 +267,7 @@ struct NameParser : util::Parser {
   }
 };
 
-template <util::fixed_string Names, typename... Ts>
+template <_kwargs_impl::fixed_string Names, typename... Ts>
 constexpr auto make(Ts&&... values) {
   struct kwargs_impl;
   consteval {
@@ -300,17 +297,17 @@ constexpr auto make(Ts&&... values) {
   return kwargs_t<kwargs_impl>{{std::forward<Ts>(values)...}};
 }
 
-template <util::fixed_string Names, typename T>
+template <_kwargs_impl::fixed_string Names, typename T>
 auto from_lambda(T&& lambda) {
   using fnc_t = std::remove_cvref_t<T>;
 
-  return [:meta::expand(nonstatic_data_members_of(^^fnc_t, std::meta::access_context::unchecked())):] >> [&]<auto... member>() {
+  return [:_kwargs_impl::expand(nonstatic_data_members_of(^^fnc_t, std::meta::access_context::unchecked())):] >> [&]<auto... member>() {
     return make<Names>(std::forward<T>(lambda).[:member:]...);
   };
 }
 }  // namespace kwargs
 
-template <util::fixed_string Names, typename... Ts>
+template <_kwargs_impl::fixed_string Names, typename... Ts>
 constexpr auto make_args(Ts&&... values) {
   return kwargs::make<Names>(std::forward<Ts>(values)...);
 }
@@ -318,9 +315,9 @@ constexpr auto make_args(Ts&&... values) {
 template <typename T>
 consteval bool has_arg(std::string_view name) {
   if constexpr (is_kwargs<std::remove_cvref_t<T>>){
-    return meta::has_member<typename std::remove_cvref_t<T>::type>(name);
+    return _kwargs_impl::has_member<typename std::remove_cvref_t<T>::type>(name);
   } else {
-    return meta::has_member<T>(name);
+    return _kwargs_impl::has_member<T>(name);
   }
 }
 
@@ -330,18 +327,18 @@ template <std::size_t I, typename T>
   requires is_kwargs<std::remove_cvref_t<T>>
 constexpr auto get(T&& kwargs) noexcept {
   using kwarg_tuple = typename std::remove_cvref_t<T>::type;
-  static_assert(meta::member_count<kwarg_tuple> > I);
+  static_assert(_kwargs_impl::member_count<kwarg_tuple> > I);
 
-  return std::forward<T>(kwargs).[:meta::get_nth_member(^^kwarg_tuple, I):];
+  return std::forward<T>(kwargs).[:_kwargs_impl::get_nth_member(^^kwarg_tuple, I):];
 }
 
-template <util::fixed_string name, typename T>
+template <_kwargs_impl::fixed_string name, typename T>
   requires is_kwargs<std::remove_cvref_t<T>>
 constexpr auto get(T&& kwargs) {
   using kwarg_tuple = typename std::remove_cvref_t<T>::type;
-  static_assert(meta::has_member<kwarg_tuple>(name), "Keyword argument `" + std::string(name) + "` not found.");
+  static_assert(_kwargs_impl::has_member<kwarg_tuple>(name), "Keyword argument `" + std::string(name) + "` not found.");
 
-  return std::forward<T>(kwargs).[:meta::get_nth_member(^^kwarg_tuple, meta::get_member_index<kwarg_tuple>(name)):];
+  return std::forward<T>(kwargs).[:_kwargs_impl::get_nth_member(^^kwarg_tuple, _kwargs_impl::get_member_index<kwarg_tuple>(name)):];
 }
 
 // get_or
@@ -349,18 +346,18 @@ template <std::size_t I, typename T, typename R>
   requires is_kwargs<std::remove_cvref_t<T>>
 constexpr auto get_or(T&& kwargs, R default_) noexcept {
   using kwarg_tuple = typename std::remove_cvref_t<T>::type;
-  if constexpr (meta::member_count<kwarg_tuple> > I) {
+  if constexpr (_kwargs_impl::member_count<kwarg_tuple> > I) {
     return get<I>(std::forward<T>(kwargs));
   } else {
     return default_;
   }
 }
 
-template <util::fixed_string name, typename T, typename R>
+template <_kwargs_impl::fixed_string name, typename T, typename R>
   requires is_kwargs<std::remove_cvref_t<T>>
 constexpr auto get_or(T&& kwargs, R default_) {
   using kwarg_tuple = typename std::remove_cvref_t<T>::type;
-  if constexpr (meta::member_count<kwarg_tuple> > meta::get_member_index<kwarg_tuple>(name)) {
+  if constexpr (_kwargs_impl::member_count<kwarg_tuple> > _kwargs_impl::get_member_index<kwarg_tuple>(name)) {
     return get<name>(std::forward<T>(kwargs));
   } else {
     return default_;
@@ -369,7 +366,7 @@ constexpr auto get_or(T&& kwargs, R default_) {
 
 #if KWARGS_FORMATTING == 1
 namespace formatting {
-struct FmtParser : util::Parser {
+struct FmtParser : _kwargs_impl::Parser {
   constexpr std::string transform(std::ranges::input_range auto const& names) {
     std::string out;
     while (is_valid()) {
@@ -395,7 +392,7 @@ struct FmtParser : util::Parser {
         // replace name
         auto it  = std::find(names.begin(), names.end(), name);
         auto idx = std::distance(names.begin(), it);
-        out += util::utos(idx);
+        out += _kwargs_impl::utos(idx);
 
         out += current();
       }
@@ -405,9 +402,9 @@ struct FmtParser : util::Parser {
   }
 };
 
-template <util::fixed_string fmt, typename Args>
+template <_kwargs_impl::fixed_string fmt, typename Args>
 std::string format_impl(Args const& kwargs) {
-  return [:meta::sequence(std::tuple_size_v<Args>):]
+  return [:_kwargs_impl::sequence(std::tuple_size_v<Args>):]
   >> [&]<std::size_t... Idx>() {
     return std::format(fmt, get<Idx>(kwargs)...);
   };
@@ -422,8 +419,8 @@ struct NamedFormatString {
     requires std::convertible_to<Tp const&, std::string_view>
   consteval explicit(false) NamedFormatString(Tp const& str) {
     auto parser = FmtParser{str};
-    auto fmt    = parser.transform(meta::get_member_names<typename Args::type>());
-    format      = extract<format_type>(substitute(^^format_impl, {meta::intern(fmt), ^^Args}));
+    auto fmt    = parser.transform(_kwargs_impl::get_member_names<typename Args::type>());
+    format      = extract<format_type>(substitute(^^format_impl, {_kwargs_impl::intern(fmt), ^^Args}));
   }
 };
 }  // namespace formatting
@@ -433,7 +430,7 @@ using named_format_string = formatting::NamedFormatString<std::type_identity_t<T
 
 template <typename T>
   requires(is_kwargs<T>)
-void print(erl::named_format_string<T> fmt, T const& kwargs) {
+void print(rsl::named_format_string<T> fmt, T const& kwargs) {
   fputs(fmt.format(kwargs).c_str(), stdout);
 }
 
@@ -445,7 +442,7 @@ void print(std::format_string<Args...> fmt, Args&&... args) {
 
 template <typename T>
   requires(is_kwargs<T>)
-void println(erl::named_format_string<T> fmt, T const& kwargs) {
+void println(rsl::named_format_string<T> fmt, T const& kwargs) {
   puts(fmt.format(kwargs).c_str());
 }
 
@@ -457,7 +454,7 @@ void println(std::format_string<Args...> fmt, Args&&... args) {
 
 template <typename T>
   requires(is_kwargs<T>)
-std::string format(erl::named_format_string<T> fmt, T const& kwargs) {
+std::string format(rsl::named_format_string<T> fmt, T const& kwargs) {
   return fmt.format(kwargs);
 }
 
@@ -475,15 +472,15 @@ template <std::meta::info F>
 struct Wrap {
   template <typename T, std::size_t PosOnly = 0>
   static constexpr void check_args() {
-    [:erl::meta::expand(parameters_of(F) | std::views::take(PosOnly)):] >>= [&]<auto Param> {
-      static_assert(!erl::meta::has_member<T>(identifier_of(Param)),
+    [:_kwargs_impl::expand(parameters_of(F) | std::views::take(PosOnly)):] >>= [&]<auto Param> {
+      static_assert(!_kwargs_impl::has_member<T>(identifier_of(Param)),
                     "In call to `" + std::string(identifier_of(F)) + "`: Positional argument `" + identifier_of(Param) +
                         "` repeated as keyword argument.");
     };
 
-    [:erl::meta::expand(parameters_of(F) | std::views::drop(PosOnly)):] >>= [&]<auto Param> {
+    [:_kwargs_impl::expand(parameters_of(F) | std::views::drop(PosOnly)):] >>= [&]<auto Param> {
       static_assert(
-          erl::meta::has_member<T>(identifier_of(Param)),
+          _kwargs_impl::has_member<T>(identifier_of(Param)),
           "In call to `" + std::string(identifier_of(F)) + "`: Argument `" + identifier_of(Param) + "` missing.");
     };
   }
@@ -500,16 +497,16 @@ struct Wrap {
     static constexpr std::size_t args_size = sizeof...(Args) - 1;
     using T                                = std::remove_cvref_t<Args...[args_size]>;
 
-    if constexpr (erl::is_kwargs<T>) {
+    if constexpr (rsl::is_kwargs<T>) {
       check_args<typename T::type, args_size>();
 
-      return [:erl::meta::expand(parameters_of(F) | std::views::drop(args_size)):] >> [&]<auto... Params> {
-        return [:erl::meta::sequence(args_size):] >> [&]<std::size_t... Idx> {
+      return [:_kwargs_impl::expand(parameters_of(F) | std::views::drop(args_size)):] >> [&]<auto... Params> {
+        return [:_kwargs_impl::sequence(args_size):] >> [&]<std::size_t... Idx> {
           return [:F:](
               /* positional arguments */
               std::forward<Args...[Idx]>(args...[Idx])...,
               /* keyword arguments */
-              get<erl::meta::get_member_index<typename T::type>(identifier_of(Params))>(args...[args_size])...);
+              get<_kwargs_impl::get_member_index<typename T::type>(identifier_of(Params))>(args...[args_size])...);
         };
       };
     } else {
@@ -524,15 +521,15 @@ constexpr inline Wrap<F> invoke{};
 }  // namespace kwargs
 #endif
 
-}  // namespace erl
+}  // namespace rsl
 
 template <typename T>
-struct std::tuple_size<erl::kwargs_t<T>>
-    : public integral_constant<size_t, erl::meta::member_count<std::remove_cvref_t<T>>> {};
+struct std::tuple_size<rsl::kwargs_t<T>>
+    : public integral_constant<size_t, rsl::_kwargs_impl::member_count<std::remove_cvref_t<T>>> {};
 
 template <std::size_t I, typename T>
-struct std::tuple_element<I, erl::kwargs_t<T>> {
-  using type = [:erl::meta::get_nth_member(^^T, I):];
+struct std::tuple_element<I, rsl::kwargs_t<T>> {
+  using type = [:rsl::_kwargs_impl::get_nth_member(^^T, I):];
 };
 
-#define make_args(...) ::erl::kwargs::from_lambda<#__VA_ARGS__>([__VA_ARGS__] {})
+#define make_args(...) ::rsl::kwargs::from_lambda<#__VA_ARGS__>([__VA_ARGS__] {})
