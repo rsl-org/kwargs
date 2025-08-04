@@ -24,6 +24,7 @@ SOFTWARE.
 
 #include <algorithm>
 #include <concepts>
+#include <meta>
 #include <string_view>
 #include <vector>
 #include <tuple>
@@ -32,7 +33,6 @@ SOFTWARE.
 #include <ranges>
 #include <cstddef>
 
-#include <experimental/meta>
 
 #ifndef KWARGS_FORMATTING
 #  define KWARGS_FORMATTING 1
@@ -129,8 +129,9 @@ consteval std::meta::info get_nth_member(std::meta::info reflection, std::size_t
 
 template <typename T>
 consteval std::size_t get_member_index(std::string_view name) {
-  std::vector<std::string_view> names =
-      nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()) | std::views::transform(std::meta::identifier_of) | std::ranges::to<std::vector>();
+  std::vector<std::string_view> names = nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()) |
+                                        std::views::transform(std::meta::identifier_of) |
+                                        std::ranges::to<std::vector>();
   if (auto it = std::ranges::find(names, name); it != names.end()) {
     return std::distance(names.begin(), it);
   }
@@ -144,36 +145,13 @@ consteval bool has_member(std::string_view name) {
 
 template <typename T>
 consteval std::vector<std::string_view> get_member_names() {
-  return nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()) | std::views::transform(std::meta::identifier_of) |
-         std::ranges::to<std::vector>();
+  return nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()) |
+         std::views::transform(std::meta::identifier_of) | std::ranges::to<std::vector>();
 }
 
 template <typename T>
-constexpr inline std::size_t member_count = nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()).size();
-
-template <char... Vs>
-constexpr inline auto static_string = _kwargs_impl::fixed_string<sizeof...(Vs)>{Vs...};
-
-template <typename T, T... Vs>
-constexpr inline T static_array[sizeof...(Vs)]{Vs...};
-
-consteval auto intern(std::string_view str) {
-  std::vector<std::meta::info> args;
-  for (auto character : str) {
-    args.push_back(std::meta::reflect_constant(character));
-  }
-  return substitute(^^static_string, args);
-}
-
-template <std::ranges::input_range R>
-  requires (!std::same_as<std::ranges::range_value_t<R>, char>)
-consteval auto intern(R&& iterable) {
-  std::vector args = {^^std::ranges::range_value_t<R>};
-  for (auto element : iterable) {
-    args.push_back(std::meta::reflect_constant(element));
-  }
-  return substitute(^^static_array, args);
-}
+constexpr inline std::size_t member_count =
+    nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()).size();
 
 namespace impl {
 template <auto... Vs>
@@ -202,22 +180,11 @@ consteval auto expand(R const& range) {
   return substitute(^^impl::replicator, args);
 }
 
-template <std::ranges::range R>
-consteval auto enumerate(R range) {
-  std::vector<std::meta::info> args;
-
-  // could also use std::views::enumerate(range)
-  for (auto idx = 0; auto item : range) {
-    args.push_back(std::meta::reflect_constant(std::pair{idx++, item}));
-  }
-  return substitute(^^impl::replicator, args);
-}
-
 consteval auto sequence(unsigned maximum) {
   return expand(std::ranges::iota_view{0U, maximum});
 }
 
-}  // namespace meta
+}  // namespace _kwargs_impl
 
 namespace kwargs {
 struct NameParser : _kwargs_impl::Parser {
@@ -296,15 +263,6 @@ constexpr auto make(Ts&&... values) {
 
   return kwargs_t<kwargs_impl>{{std::forward<Ts>(values)...}};
 }
-
-template <_kwargs_impl::fixed_string Names, typename T>
-auto from_lambda(T&& lambda) {
-  using fnc_t = std::remove_cvref_t<T>;
-
-  return [:_kwargs_impl::expand(nonstatic_data_members_of(^^fnc_t, std::meta::access_context::unchecked())):] >> [&]<auto... member>() {
-    return make<Names>(std::forward<T>(lambda).[:member:]...);
-  };
-}
 }  // namespace kwargs
 
 template <_kwargs_impl::fixed_string Names, typename... Ts>
@@ -314,7 +272,7 @@ constexpr auto make_args(Ts&&... values) {
 
 template <typename T>
 consteval bool has_arg(std::string_view name) {
-  if constexpr (is_kwargs<std::remove_cvref_t<T>>){
+  if constexpr (is_kwargs<std::remove_cvref_t<T>>) {
     return _kwargs_impl::has_member<typename std::remove_cvref_t<T>::type>(name);
   } else {
     return _kwargs_impl::has_member<T>(name);
@@ -404,8 +362,7 @@ struct FmtParser : _kwargs_impl::Parser {
 
 template <_kwargs_impl::fixed_string fmt, typename Args>
 std::string format_impl(Args const& kwargs) {
-  return [:_kwargs_impl::sequence(std::tuple_size_v<Args>):]
-  >> [&]<std::size_t... Idx>() {
+  return [:_kwargs_impl::sequence(std::tuple_size_v<Args>):] >> [&]<std::size_t... Idx>() {
     return std::format(fmt, get<Idx>(kwargs)...);
   };
 }
@@ -420,7 +377,7 @@ struct NamedFormatString {
   consteval explicit(false) NamedFormatString(Tp const& str) {
     auto parser = FmtParser{str};
     auto fmt    = parser.transform(_kwargs_impl::get_member_names<typename Args::type>());
-    format      = extract<format_type>(substitute(^^format_impl, {_kwargs_impl::intern(fmt), ^^Args}));
+    format      = extract<format_type>(substitute(^^format_impl, {std::meta::reflect_constant_string(fmt), ^^Args}));
   }
 };
 }  // namespace formatting
@@ -532,4 +489,11 @@ struct std::tuple_element<I, rsl::kwargs_t<T>> {
   using type = [:rsl::_kwargs_impl::get_nth_member(^^T, I):];
 };
 
-#define make_args(...) ::rsl::kwargs::from_lambda<#__VA_ARGS__>([__VA_ARGS__] {})
+#define make_args(...)                                                                                     \
+  [__VA_ARGS__]<typename T>(this T&& _impl_this) {                                                         \
+    constexpr static auto _impl_captures =                                                                 \
+        define_static_array(nonstatic_data_members_of(^^T, std::meta::access_context::current()));         \
+    return [:rsl::_kwargs_impl::sequence(_impl_captures.size()):] >> [&]<std::size_t... Idx> {             \
+      return rsl::kwargs::make<#__VA_ARGS__>(std::forward_like<T>(_impl_this.[:_impl_captures[Idx]:])...); \
+    };                                                                                                     \
+  }()
