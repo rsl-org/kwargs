@@ -33,7 +33,6 @@ SOFTWARE.
 #include <ranges>
 #include <cstddef>
 
-
 #ifndef KWARGS_FORMATTING
 #  define KWARGS_FORMATTING 1
 #endif
@@ -489,11 +488,12 @@ struct std::tuple_element<I, rsl::kwargs_t<T>> {
   using type = [:rsl::_kwargs_impl::get_nth_member(^^T, I):];
 };
 
-#define make_args(...)                                                                                     \
-  [__VA_ARGS__]<typename T>(this T&& _impl_this) {                                                         \
-    constexpr static auto _impl_captures =                                                                 \
-        define_static_array(nonstatic_data_members_of(^^T, std::meta::access_context::current()));         \
-    return [:rsl::_kwargs_impl::sequence(_impl_captures.size()):] >> [&]<std::size_t... Idx> {             \
-      return rsl::kwargs::make<#__VA_ARGS__>(std::forward_like<T>(_impl_this.[:_impl_captures[Idx]:])...); \
-    };                                                                                                     \
+#define make_args(...)                                                                                        \
+  [__VA_ARGS__]<typename T>(this T _impl_this) {                                                              \
+    constexpr static auto _impl_captures =                                                                    \
+        define_static_array(nonstatic_data_members_of(^^T, std::meta::access_context::current()));            \
+    return [:rsl::_kwargs_impl::sequence(_impl_captures.size()):] >> [&]<std::size_t... Idx> {                \
+      return rsl::kwargs::make<#__VA_ARGS__>(                                                                 \
+          std::forward<decltype(_impl_this.[:_impl_captures[Idx]:])>(_impl_this.[:_impl_captures[Idx]:])...); \
+    };                                                                                                        \
   }()
