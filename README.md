@@ -1,6 +1,6 @@
 # kwargs
 
-`rsl::kwargs` is an experimental single-header library that allows for keyword arguments (also known as labeled or named arguments) through use of C++26 reflection ([P2996](https://wg21.link/p2996)).
+`erl::kwargs` is an experimental single-header library that allows for keyword arguments (also known as labeled or named arguments) through use of C++26 reflection ([P2996](https://wg21.link/p2996)).
 
 You can find more information about it's implementation in my blog post [Fun with C++26 reflection - Keyword Arguments](https://pydong.org/posts/KwArgs/).
 
@@ -24,7 +24,7 @@ You can opt into wrappers around `std::print`, `std::println` and `std::format` 
 #include <kwargs.h>
 
 template <typename T>
-int test(int x, rsl::kwargs_t<T> args){
+int test(int x, erl::kwargs_t<T> args){
   return x * get<"y">(args, 42);
 }
 
@@ -37,7 +37,7 @@ int main(){
   // optional wrappers around `std::format`, `std::println` 
   // and `std::format`
   int y = 3;
-  rsl::println("foo: {foo} bar: {bar}", 
+  erl::println("foo: {foo} bar: {bar}", 
                make_args(bar=3, 
                          foo=test(7, make_args(y))));
 }

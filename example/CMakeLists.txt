@@ -1,4 +1,4 @@
-project(rsl)
+project(erl)
 
 function(DEFINE_EXAMPLE TARGET)
   add_executable(${TARGET} "${TARGET}.cpp")

@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 /*
 MIT License
 
@@ -23,7 +23,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-
 #include <algorithm>
 #include <concepts>
 #include <meta>
@@ -46,7 +45,7 @@ SOFTWARE.
 #  include <string>
 #endif
 
-namespace rsl {
+namespace erl {
 
 template <typename Impl>
 struct [[nodiscard]] kwargs_t : Impl {
@@ -297,7 +296,8 @@ constexpr auto get(T&& kwargs) {
   using kwarg_tuple = typename std::remove_cvref_t<T>::type;
   static_assert(_kwargs_impl::has_member<kwarg_tuple>(name), "Keyword argument `" + std::string(name) + "` not found.");
 
-  return std::forward<T>(kwargs).[:_kwargs_impl::get_nth_member(^^kwarg_tuple, _kwargs_impl::get_member_index<kwarg_tuple>(name)):];
+  return std::forward<T>(kwargs)
+      .[:_kwargs_impl::get_nth_member(^^kwarg_tuple, _kwargs_impl::get_member_index<kwarg_tuple>(name)):];
 }
 
 // get_or
@@ -388,7 +388,7 @@ using named_format_string = formatting::NamedFormatString<std::type_identity_t<T
 
 template <typename T>
   requires(is_kwargs<T>)
-void print(rsl::named_format_string<T> fmt, T const& kwargs) {
+void print(erl::named_format_string<T> fmt, T const& kwargs) {
   fputs(fmt.format(kwargs).c_str(), stdout);
 }
 
@@ -400,7 +400,7 @@ void print(std::format_string<Args...> fmt, Args&&... args) {
 
 template <typename T>
   requires(is_kwargs<T>)
-void println(rsl::named_format_string<T> fmt, T const& kwargs) {
+void println(erl::named_format_string<T> fmt, T const& kwargs) {
   puts(fmt.format(kwargs).c_str());
 }
 
@@ -412,7 +412,7 @@ void println(std::format_string<Args...> fmt, Args&&... args) {
 
 template <typename T>
   requires(is_kwargs<T>)
-std::string format(rsl::named_format_string<T> fmt, T const& kwargs) {
+std::string format(erl::named_format_string<T> fmt, T const& kwargs) {
   return fmt.format(kwargs);
 }
 
@@ -455,7 +455,7 @@ struct Wrap {
     static constexpr std::size_t args_size = sizeof...(Args) - 1;
     using T                                = std::remove_cvref_t<Args...[args_size]>;
 
-    if constexpr (rsl::is_kwargs<T>) {
+    if constexpr (erl::is_kwargs<T>) {
       check_args<typename T::type, args_size>();
 
       return [:_kwargs_impl::expand(parameters_of(F) | std::views::drop(args_size)):] >> [&]<auto... Params> {
@@ -479,23 +479,23 @@ constexpr inline Wrap<F> invoke{};
 }  // namespace kwargs
 #endif
 
-}  // namespace rsl
+}  // namespace erl
 
 template <typename T>
-struct std::tuple_size<rsl::kwargs_t<T>>
-    : public integral_constant<size_t, rsl::_kwargs_impl::member_count<std::remove_cvref_t<T>>> {};
+struct std::tuple_size<erl::kwargs_t<T>>
+    : public integral_constant<size_t, erl::_kwargs_impl::member_count<std::remove_cvref_t<T>>> {};
 
 template <std::size_t I, typename T>
-struct std::tuple_element<I, rsl::kwargs_t<T>> {
-  using type = [:rsl::_kwargs_impl::get_nth_member(^^T, I):];
+struct std::tuple_element<I, erl::kwargs_t<T>> {
+  using type = [:erl::_kwargs_impl::get_nth_member(^^T, I):];
 };
 
 #define make_args(...)                                                                                        \
   [__VA_ARGS__]<typename T>(this T _impl_this) {                                                              \
     constexpr static auto _impl_captures =                                                                    \
         define_static_array(nonstatic_data_members_of(^^T, std::meta::access_context::current()));            \
-    return [:rsl::_kwargs_impl::sequence(_impl_captures.size()):] >> [&]<std::size_t... Idx> {                \
-      return rsl::kwargs::make<#__VA_ARGS__>(                                                                 \
+    return [:erl::_kwargs_impl::sequence(_impl_captures.size()):] >> [&]<std::size_t... Idx> {                \
+      return erl::kwargs::make<#__VA_ARGS__>(                                                                 \
           std::forward<decltype(_impl_this.[:_impl_captures[Idx]:])>(_impl_this.[:_impl_captures[Idx]:])...); \
     };                                                                                                        \
   }()

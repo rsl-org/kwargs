@@ -7,7 +7,7 @@
 #include <kwargs.h>
 
 void check(std::string_view str, std::vector<std::string_view> const& names, std::string_view expected, std::source_location const& loc = std::source_location::current()){
-  auto parser = rsl::formatting::FmtParser{str};
+  auto parser = erl::formatting::FmtParser{str};
   auto result = parser.transform(names);
 
   auto source_location = std::format("{}:{}", loc.file_name(), loc.line());
